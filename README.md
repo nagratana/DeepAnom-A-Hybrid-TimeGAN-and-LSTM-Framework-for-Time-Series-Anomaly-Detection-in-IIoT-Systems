@@ -37,4 +37,5 @@ This project leverages an IIoT Edge Computing dataset to:
 3. The dashboard will be accessible via browser at `http://localhost:81/`.
 
 ## Author
-Provided by the user under week 6 major project.
+Nagratana
+
