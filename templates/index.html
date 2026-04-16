@@ -1,0 +1,509 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Synthetic Time-Series Generation & Anomaly Detector</title>
+
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    /* ----------------- Global ----------------- */
+    :root{
+      --bg-1: #07102b;
+      --bg-2: #09122f;
+      --accent-1: #00e6ff;
+      --accent-2: #8a2be2;
+      --glass: rgba(255,255,255,0.04);
+      --muted: rgba(255,255,255,0.6);
+      --card-shadow: 0 8px 30px rgba(0,0,0,0.6);
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      font-family: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+      background: radial-gradient(1200px 400px at 10% 10%, rgba(138,43,226,0.12), transparent 10%),
+                  radial-gradient(1000px 300px at 90% 90%, rgba(0,230,255,0.06), transparent 12%),
+                  linear-gradient(180deg,var(--bg-1) 0%, var(--bg-2) 100%);
+      color: #E8F7FF;
+      -webkit-font-smoothing:antialiased;
+      -moz-osx-font-smoothing:grayscale;
+      padding: 36px;
+    }
+
+    /* ----------------- Layout ----------------- */
+    .wrap{
+      max-width:1200px;
+      margin: 0 auto;
+      display:grid;
+      grid-template-columns: 420px 1fr;
+      gap: 28px;
+      align-items:start;
+    }
+
+    /* ----------------- Left panel (controls) ----------------- */
+    .panel {
+      background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+      border-radius: 14px;
+      padding: 22px;
+      box-shadow: var(--card-shadow);
+      border: 1px solid rgba(255,255,255,0.03);
+      position: relative;
+      overflow: hidden;
+      min-height: 640px;
+    }
+    .brand{
+      display:flex;
+      gap:12px;
+      align-items:center;
+      margin-bottom: 12px;
+    }
+    .logo{
+      width:56px;height:56px;border-radius:12px;
+      background: linear-gradient(135deg,var(--accent-1),var(--accent-2));
+      display:flex;align-items:center;justify-content:center;font-weight:800;color:#001;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.5);
+      transform:rotate(-8deg);
+      font-family:monospace;
+    }
+    .title{
+      font-size:1.05rem;
+      line-height:1;
+    }
+    .subtitle{font-size:0.85rem;color:var(--muted);margin-top:4px}
+
+    .section{
+      margin-top:18px;
+    }
+    label{display:block;color:var(--muted);font-size:0.78rem;margin-bottom:8px}
+    .inputs{
+      display:flex;flex-wrap:wrap;gap:10px;
+    }
+    .inputs input[type="number"]{
+      width: calc(50% - 5px);
+      padding:10px 12px;border-radius:9px;border:1px solid rgba(255,255,255,0.04);
+      background: rgba(255,255,255,0.02); color:#E8F7FF;
+    }
+    .btn{
+      display:inline-flex;align-items:center;gap:10px;padding:10px 14px;border-radius:10px;
+      border:none;cursor:pointer;background:linear-gradient(90deg,var(--accent-1),var(--accent-2));
+      color:#001;font-weight:700;margin-top:12px;
+      box-shadow: 0 8px 30px rgba(138,43,226,0.12);
+    }
+    .muted-note{font-size:0.78rem;color:var(--muted);margin-top:8px}
+
+    /* file upload */
+    .file-drop{
+      margin-top:10px;padding:14px;border-radius:10px;border:1px dashed rgba(255,255,255,0.05);
+      background: linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.00));
+      text-align:center;color:var(--muted); cursor:pointer;
+    }
+
+    /* small cards */
+    .stat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:16px}
+    .stat{
+      background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+      padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,0.03);
+      text-align:left;
+    }
+    .stat .num{font-size:1.2rem;font-weight:700}
+    .stat .lbl{font-size:0.78rem;color:var(--muted)}
+
+    /* ----------------- Right panel (visualization) ----------------- */
+    .board{
+      background: linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.00));
+      border-radius: 14px;padding:20px; min-height:640px; box-shadow:var(--card-shadow);
+      border: 1px solid rgba(255,255,255,0.03);
+      display:flex;flex-direction:column;gap:18px;
+    }
+    .hero{
+      display:flex;gap:16px;align-items:center;justify-content:space-between;
+    }
+    .proj-title{
+      font-size:1.25rem;font-weight:800;
+      letter-spacing:0.4px;
+    }
+    .proj-desc{color:var(--muted);font-size:0.92rem}
+
+    .charts{
+      display:grid;grid-template-columns:1fr 1fr;gap:14px;
+    }
+    .card{
+      background: linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.00));
+      padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,0.03);
+      min-height:220px;
+    }
+
+    canvas{width:100% !important;height:220px !important}
+
+    .footer{
+      margin-top:auto;padding-top:8px;border-top:1px dashed rgba(255,255,255,0.02);display:flex;justify-content:space-between;align-items:center;
+      color:var(--muted);font-size:0.9rem;
+    }
+
+    /* responsive */
+    @media (max-width:980px){
+      .wrap{grid-template-columns:1fr; padding-bottom:60px}
+      .charts{grid-template-columns:1fr}
+      .inputs input[type="number"]{width:100%}
+      .stat-grid{grid-template-columns:repeat(3,1fr)}
+    }
+
+    /* subtle animated scanline overlay */
+    .panel::after{
+      content:"";position:absolute;left:-40%;top:-40%;width:200%;height:200%;
+      background: linear-gradient(90deg, rgba(255,255,255,0.01), rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+      transform: rotate(15deg);opacity:0.06;pointer-events:none;animation: drift 12s linear infinite;
+    }
+    @keyframes drift { from{transform:rotate(15deg) translateX(-8%)} to{transform:rotate(15deg) translateX(8%)} }
+  </style>
+</head>
+<body>
+
+  <div class="wrap">
+    <!-- ---------- LEFT: Controls ---------- -->
+    <div class="panel">
+      <div class="brand">
+        <div class="logo">CC</div>
+        <div>
+          <div class="title">Alpha — Synthetic Time-Series Generation & Anomaly Detector </div>
+          <div class="subtitle">A UI for your final-project.ipynb — simulate, upload, & detect anamolies</div>
+        </div>
+      </div>
+
+      <div class="section">
+        <label>Quick Predict — paste 24 rows × 7 CSV values (Temperature, Pressure, Vibration, Network_Latency, Edge_Processing_Time, Fuzzy_PID_Output, Predicted_Failure)</label>
+        <textarea id="predict-textarea" rows="6" style="width:100%;padding:10px;border-radius:9px;border:1px solid rgba(255,255,255,0.04);background:rgba(255,255,255,0.02);color:#E8F7FF;font-family:monospace;font-size:0.8rem;resize:vertical;" placeholder="97.28,111.49,22.19,31.29,4.14,0.98,0&#10;82.61,92.16,38.67,14.13,12.18,0.66,1&#10;... (24 rows total)"></textarea>
+        <button class="btn" id="btn-predict">🔍 Predict</button>
+        <div class="muted-note">Sends 24×7 data to <code>/predict</code> (POST) for real model inference.</div>
+      </div>
+
+      <div class="section">
+        <label>Upload CSV for batch detection</label>
+        <div class="file-drop" id="file-drop">Click or drop a CSV here — columns: timestep, sensor1, sensor2, ...</div>
+        <input type="file" id="csv-file" accept=".csv" style="display:none"/>
+        <button class="btn" id="btn-upload" style="margin-top:10px">📤 Upload & Detect</button>
+        <div class="muted-note">Upload posts to <code>/upload</code>. Backend should return JSON array of results.</div>
+      </div>
+
+      <div class="section">
+        <label>Generate synthetic sequence</label>
+        <div style="display:flex;gap:10px;">
+          <input type="number" id="s-len" value="24" min="4" style="width:110px;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:rgba(255,255,255,0.02);" />
+          <select id="s-mode" style="padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:rgba(255,255,255,0.01);color:#E8F7FF;">
+            <option value="sine">Sine + Noise</option>
+            <option value="random">Random Walk</option>
+            <option value="trend">Trend + Noise</option>
+          </select>
+          <button class="btn" id="btn-gen">✨ Generate</button>
+        </div>
+        <div class="muted-note">Generates demo time-series to inspect the detector behavior locally.</div>
+      </div>
+
+      <div class="section stat-grid">
+        <div class="stat">
+          <div class="num" id="stat-count">—</div>
+          <div class="lbl">Total samples processed</div>
+        </div>
+        <div class="stat">
+          <div class="num" id="stat-anom">—</div>
+          <div class="lbl">Anomalies detected</div>
+        </div>
+        <div class="stat">
+          <div class="num" id="stat-last">—</div>
+          <div class="lbl">Last MSE</div>
+        </div>
+        <div class="stat">
+          <div class="num" id="stat-th">0.25</div>
+          <div class="lbl">Threshold</div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div style="margin-top:6px;color:var(--muted);font-size:0.82rem">
+          Tip: Hook <code>/get_metrics</code> to load your training accuracy/loss history and replace the demo graph.
+        </div>
+      </div>
+    </div>
+
+    <!-- ---------- RIGHT: Visualization & Charts ---------- -->
+    <div class="board">
+      <div class="hero">
+        <div>
+          <div class="proj-title">Synthetic Time-Series Generation & Anomaly Detection using TimeGAN</div>
+          <div class="proj-desc">Visualize training metrics, run live predictions, and inspect synthetic sequences — built to integrate with your final-project.ipynb Flask server.</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-weight:700;color:var(--accent-1)">Status: <span id="srv-status">Demo</span></div>
+          <div style="font-size:0.85rem;color:var(--muted)">Connected: <span id="srv-url">local</span></div>
+        </div>
+      </div>
+
+      <div class="charts">
+        <div class="card">
+          <h4 style="margin:0 0 10px 0">Accuracy (Train vs Val)</h4>
+          <canvas id="accuracyChart"></canvas>
+        </div>
+        <div class="card">
+          <h4 style="margin:0 0 10px 0">Loss (Train vs Val)</h4>
+          <canvas id="lossChart"></canvas>
+        </div>
+
+        <div class="card" style="grid-column:1 / -1;">
+          <h4 style="margin:0 0 10px 0">Sequence Viewer & Prediction Output</h4>
+          <canvas id="seqChart" style="height:260px;"></canvas>
+          <div style="display:flex;gap:12px;margin-top:10px;align-items:center">
+            <div id="pred-output" style="font-weight:700;color:#fff">Result: —</div>
+            <div style="color:var(--muted)">MSE: <span id="pred-mse">—</span></div>
+            <div style="margin-left:auto;color:var(--muted)">Epochs: <span id="metric-epochs">—</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="footer">
+        <div>Made with ♥ by <strong>Alpha</strong> · Final Project UI</div>
+        <div style="font-size:0.85rem;color:var(--muted)">Tip: Run Flask with <code>python app.py</code> and ensure endpoints match</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /* ----------------- Helper: Demo metrics (fallback) ----------------- */
+    const demoMetrics = (() => {
+      const E = 30;
+      const epochs = Array.from({length:E}, (_,i) => i+1);
+      const accuracy = epochs.map((e,i) => 0.65 + (i/(E-1))*0.33 + Math.random()*0.01);
+      const val_accuracy = epochs.map((e,i) => 0.62 + (i/(E-1))*0.31 + (Math.random()*0.01 - 0.005));
+      const loss = epochs.map((e,i) => 0.5 - (i/(E-1))*0.45 + Math.random()*0.01);
+      const val_loss = epochs.map((e,i) => 0.55 - (i/(E-1))*0.43 + Math.random()*0.01);
+      return { epochs, accuracy, val_accuracy, loss, val_loss };
+    })();
+
+    /* ----------------- Charts init ----------------- */
+    const accCtx = document.getElementById('accuracyChart').getContext('2d');
+    const lossCtx = document.getElementById('lossChart').getContext('2d');
+    const seqCtx = document.getElementById('seqChart').getContext('2d');
+
+    let accuracyChart = new Chart(accCtx, {
+      type: 'line',
+      data: {
+        labels: demoMetrics.epochs,
+        datasets: [
+          { label:'Train Acc', data: demoMetrics.accuracy, fill:false, tension:0.2, borderWidth:2, borderColor:'#00e6ff' },
+          { label:'Val Acc', data: demoMetrics.val_accuracy, fill:false, tension:0.2, borderWidth:2, borderColor:'#8a2be2' }
+        ]
+      },
+      options: { responsive:true, plugins:{legend:{labels:{color:'#dff'}}}, scales:{y:{min:0,max:1}} }
+    });
+
+    let lossChart = new Chart(lossCtx, {
+      type: 'line',
+      data: {
+        labels: demoMetrics.epochs,
+        datasets: [
+          { label:'Train Loss', data: demoMetrics.loss, fill:false, tension:0.2, borderWidth:2, borderColor:'#ff9f00' },
+          { label:'Val Loss', data: demoMetrics.val_loss, fill:false, tension:0.2, borderWidth:2, borderColor:'#ff6b6b' }
+        ]
+      },
+      options: { responsive:true, plugins:{legend:{labels:{color:'#dff'}}}, scales:{y:{min:0}} }
+    });
+
+    let seqChart = new Chart(seqCtx, {
+      type:'line',
+      data:{ labels:[], datasets:[
+        { label:'Sensor 1', data:[], fill:false, borderColor:'#00e6ff', tension:0.2 },
+        { label:'Sensor 2', data:[], fill:false, borderColor:'#8a2be2', tension:0.2 }
+      ]},
+      options:{ responsive:true, plugins:{legend:{labels:{color:'#dff'}}}, scales:{y:{}} }
+    });
+
+    /* ----------------- DOM helpers ----------------- */
+    const fileDrop = document.getElementById('file-drop');
+    const csvInput = document.getElementById('csv-file');
+    const btnUpload = document.getElementById('btn-upload');
+    const btnPredict = document.getElementById('btn-predict');
+    const btnGen = document.getElementById('btn-gen');
+    const statCount = document.getElementById('stat-count');
+    const statAnom  = document.getElementById('stat-anom');
+    const statLast  = document.getElementById('stat-last');
+    const statTh    = document.getElementById('stat-th');
+    const predOutput= document.getElementById('pred-output');
+    const predMse   = document.getElementById('pred-mse');
+
+    let processedCount = 0, anomalyCount = 0;
+
+    /* ----------------- File drop handlers ----------------- */
+    fileDrop.addEventListener('click', () => csvInput.click());
+    fileDrop.addEventListener('dragover', (e) => { e.preventDefault(); fileDrop.style.borderColor = '#00e6ff'; });
+    fileDrop.addEventListener('dragleave', (e) => { e.preventDefault(); fileDrop.style.borderColor = 'rgba(255,255,255,0.05)'; });
+    fileDrop.addEventListener('drop', (e) => {
+      e.preventDefault();
+      fileDrop.style.borderColor = 'rgba(255,255,255,0.05)';
+      const file = e.dataTransfer.files[0];
+      if (file) handleCSVFile(file);
+    });
+
+    csvInput.addEventListener('change', (ev) => {
+      const file = ev.target.files[0];
+      if (file) handleCSVFile(file);
+    });
+
+    btnUpload.addEventListener('click', () => {
+      const file = csvInput.files[0];
+      if (!file) return alert('Please choose a CSV file or drop it in the area above.');
+      handleCSVFile(file);
+    });
+
+    /* ----------------- CSV upload — send file to backend /upload ----------------- */
+    function handleCSVFile(file){
+      const formData = new FormData();
+      formData.append('file', file);
+
+      predOutput.innerText = 'Result: Processing...';
+
+      fetch('/upload', {
+        method: 'POST',
+        body: formData
+      }).then(r => {
+        if (!r.ok) return r.json().then(j => { throw new Error(j.error || 'Upload failed'); });
+        return r.json();
+      }).then(result => {
+        // Update stats with real model results
+        processedCount += result.total_windows;
+        anomalyCount += result.anomalies_found;
+        statCount.innerText = processedCount;
+        statAnom.innerText = anomalyCount;
+        statTh.innerText = result.threshold;
+
+        // Show last window MSE
+        const lastResult = result.results[result.results.length - 1];
+        statLast.innerText = lastResult.mse.toFixed(6);
+
+        // Update sequence chart with MSE values per window
+        const mseValues = result.results.map(r => r.mse);
+        const threshLine = result.results.map(() => result.threshold);
+        seqChart.data.labels = result.results.map(r => 'W' + r.window);
+        seqChart.data.datasets[0].label = 'MSE per Window';
+        seqChart.data.datasets[0].data = mseValues;
+        seqChart.data.datasets[1].label = 'Threshold';
+        seqChart.data.datasets[1].data = threshLine;
+        seqChart.data.datasets[1].borderDash = [5, 5];
+        seqChart.data.datasets[1].borderColor = '#ff6b6b';
+        seqChart.update();
+
+        const anomLabel = result.anomalies_found > 0 ? '⚠️ Anomaly' : '✅ Normal';
+        predOutput.innerText = `Result: ${anomLabel} — ${result.anomalies_found}/${result.total_windows} windows anomalous`;
+        predMse.innerText = lastResult.mse.toFixed(6);
+      }).catch(err => {
+        predOutput.innerText = 'Result: Error — ' + err.message;
+        console.error('Upload error:', err);
+      });
+    }
+
+    /* ----------------- Utility: update sequence chart ----------------- */
+    function updateSequenceChart(arr1, arr2){
+      seqChart.data.labels = arr1.map((_,i) => i+1);
+      seqChart.data.datasets[0].data = arr1;
+      seqChart.data.datasets[1].data = arr2 || arr1.map(x => x*0.9 + Math.random()*0.1);
+      seqChart.update();
+    }
+
+    /* ----------------- Manual predict (textarea: 24 rows x 7 cols) ----------------- */
+    btnPredict.addEventListener('click', async () => {
+      const raw = document.getElementById('predict-textarea').value.trim();
+      if (!raw) { alert('Paste 24 rows of 7 comma-separated sensor values.'); return; }
+
+      const rows = raw.split(/\r?\n/).filter(r => r.trim());
+      // Skip header if first cell is non-numeric
+      let dataRows = rows;
+      try { parseFloat(rows[0].split(',')[0]); } catch(e) { dataRows = rows.slice(1); }
+
+      const sequence = dataRows.map(r => r.split(',').map(Number));
+
+      if (sequence.length !== 24) { alert(`Need exactly 24 rows, got ${sequence.length}.`); return; }
+      if (sequence[0].length !== 7) { alert(`Need 7 values per row, got ${sequence[0].length}.`); return; }
+
+      predOutput.innerText = 'Result: Processing...';
+
+      try {
+        const resp = await fetch('/predict', {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ sequence: sequence })
+        });
+        if (!resp.ok) {
+          const err = await resp.json();
+          throw new Error(err.error || 'Prediction failed');
+        }
+        const json = await resp.json();
+        showPrediction(json.result, json.mse);
+        processedCount++;
+        if (json.is_anomaly) anomalyCount++;
+        statTh.innerText = json.threshold;
+      } catch(e){
+        predOutput.innerText = 'Result: Error — ' + e.message;
+        console.error('Predict error:', e);
+      }
+      statCount.innerText = processedCount;
+      statAnom.innerText = anomalyCount;
+      statLast.innerText = predMse.innerText;
+    });
+
+    function showPrediction(text, mse){
+      predOutput.innerText = "Result: " + text;
+      predMse.innerText = (typeof mse === 'number' ? mse.toFixed(5) : mse);
+    }
+
+    /* ----------------- Synthetic generator ----------------- */
+    btnGen.addEventListener('click', ()=>{
+      const len = parseInt(document.getElementById('s-len').value || 24);
+      const mode = document.getElementById('s-mode').value;
+      const seq = generateSeq(len, mode);
+      const seq2 = seq.map(x => x*0.95 + Math.random()*0.03);
+      updateSequenceChart(seq, seq2);
+      // optionally auto-run predict on generated sequence
+    });
+
+    function generateSeq(len, mode){
+      const arr = new Array(len).fill(0).map((_,i) => {
+        const t = i/len * Math.PI*2;
+        if (mode === 'sine') return Math.sin(t*2) * (1 + Math.random()*0.1);
+        if (mode === 'random') return (i===0?0:arr[i-1] + (Math.random()-0.45)*0.4);
+        if (mode === 'trend') return (i*0.02) + Math.sin(t) * 0.5 + (Math.random()-0.5)*0.08;
+        return Math.random();
+      });
+      return arr;
+    }
+
+    /* ----------------- On load: fetch model status from /get_metrics ----------------- */
+    async function tryFetchMetrics(){
+      try {
+        const resp = await fetch('/get_metrics');
+        if (!resp.ok) throw new Error('metrics endpoint not ready');
+        const json = await resp.json();
+
+        // Update status based on server response
+        if (json.model_loaded) {
+          document.getElementById('srv-status').innerText = 'Model Ready';
+          document.getElementById('srv-status').style.color = '#00ff88';
+        } else {
+          document.getElementById('srv-status').innerText = 'Model Not Loaded';
+          document.getElementById('srv-status').style.color = '#ff6b6b';
+        }
+        document.getElementById('srv-url').innerText = window.location.origin;
+        statTh.innerText = json.threshold;
+        document.getElementById('metric-epochs').innerText = json.seq_len + ' steps';
+      } catch(e){
+        document.getElementById('srv-status').innerText = 'Offline';
+        document.getElementById('srv-url').innerText = 'Cannot reach server';
+      }
+    }
+
+    // run at start
+    tryFetchMetrics();
+  </script>
+
+</body>
+</html>
